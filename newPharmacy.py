@@ -8,12 +8,23 @@ from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
 
 course_name = "F21 PHAR 5195 Sterile Products Checkoff"
-file_path = "./Files/IAGrader Assignment in ExamSoft PHAR5158.xlsx"
+file_path = "./Files/exam.xlsx"
 print("Reading File ", file_path)
 
 df = pd.read_excel(file_path, usecols="A, B, E")
 
 print("File Reading Done!")
+
+print("Starting Data Proeprocessing")
+
+df["Full Name"] = list(zip(df["Last Name"], df['First Name']))
+grader_dict = df.groupby('Grader Assignment')['Full Name'].apply(list).to_dict()
+
+print("Data Preprocessing done")
+print(grader_dict)
+
+# for key, value in grader_dict.items():
+#     print(f'{key} : {value}')
 
 # PATHS
 user_id_homepage = 'userid'
@@ -76,12 +87,35 @@ def wait_till_invisibility(by_type, path, time=common_time):
     wait.until(EC.invisibility_of_element_located((by_type, path)))
 
 
+def binary_search(arr, x):
+    low = 0
+    high = len(arr) - 1
+    mid = 0
+
+    while low <= high:
+
+        mid = (high + low) // 2
+
+        # If x is greater, ignore left half
+        if arr[mid] < x:
+            low = mid + 1
+
+        # If x is smaller, ignore right half
+        elif arr[mid] > x:
+            high = mid - 1
+
+        # means x is present at mid
+        else:
+            return mid
+
+
 username = 'skurella'
 password = 'Aug@2021'
 
 driver = webdriver.Chrome(executable_path='drivers/chromedriver.exe')
 
 driver.get('https://ei.examsoft.com/GKWeb/login/uhpharm')
+driver.maximize_window()
 
 driver.implicitly_wait(common_time)
 
@@ -154,77 +188,71 @@ if course_name in text_getter(By.XPATH, course_headline_current_text):
         # print('current_grader on grder open page    = ', text_getter(By.XPATH, grader_name_on_ui))
 
         if text_getter(By.XPATH, grader_name_on_ui) == current_grader:
-            for index, row in df.iterrows():
-                candidate_last_name_excel = row['Last Name'].strip()
-                candidate_first_name_excel = row['First Name'].strip()
-                candidate_corresponding_grader_excel = row['Grader Assignment'].strip()
+            for grader, value in grader_dict.items():
+                if grader.strip() == current_grader:
+                    for full_name in value:
+                        candidate_last_name_excel, candidate_first_name_excel = full_name
+                        for num in range(
+                                len(driver.find_elements(By.XPATH, "//div[@id='availableETsTable_length']//a"))):
+                            try:
+                                just_clicker(By.XPATH, "(//div[@id='availableETsTable_length']//a)[2]")
+                                wait_till_invisibility(By.ID, loading_after_grade_click, common_time)
+                            except:
+                                print("In excepter for " + str(num) + " th tim  e")
+                                break
 
-                # print('candidate_corresponding_grader_excel = ', candidate_corresponding_grader_excel)
-                # print('current grader on open page = ', text_getter(By.XPATH, grader_name_on_ui))
+                        html = driver.find_element_by_tag_name('html')
+                        html.send_keys(Keys.END)
 
-                if candidate_corresponding_grader_excel == current_grader:
+                        all_available_unchecked_student_rows = driver.find_elements(By.XPATH, student_rows_unchecked)
 
-                    for num in range(len(driver.find_elements(By.XPATH, "//div[@id='availableETsTable_length']//a"))):
-                        try:
-                            # WebDriverWait(driver, 2).until(
-                            #     EC.element_to_be_clickable(
-                            #         (By.XPATH, "(//div[@id='availableETsTable_length']//a)[" + str((num + 1)) + "]")))
+                        # full_name_list = []
+                        # for m in range(len(all_available_unchecked_student_rows)):
+                        #     last_name_on_uii = (driver.find_elements(By.XPATH, student_rows_unchecked + "//td[2]"))[
+                        #         m].text.strip().lower()
+                        #     first_name_on_uii = driver.find_elements(By.XPATH, student_rows_unchecked + "//td[3]")[
+                        #         m].text.strip().lower()
+                        #     full_name_list.append(last_name_on_uii + first_name_on_uii)
+                        #
+                        # print(full_name_list)
 
-                            # just_clicker(By.XPATH, "(//div[@id='availableETsTable_length']//a)[" + str((num + 1)) + "]")
-                            just_clicker(By.XPATH, "(//div[@id='availableETsTable_length']//a)[2]")
+                        for j in range(len(all_available_unchecked_student_rows)):
+                            # print('searching for names ', j)
+                            last_name_on_ui = (driver.find_elements(By.XPATH, student_rows_unchecked + "//td[2]"))[
+                                j].text.strip()
+                            first_name_on_ui = driver.find_elements(By.XPATH, student_rows_unchecked + "//td[3]")[
+                                j].text.strip()
 
-                            wait_till_invisibility(By.ID, loading_after_grade_click, common_time)
-                        except:
-                            print("In excepter for " + str(num) + " th time")
-                            break
+                            # print('searching done for names ', j)
 
-                    html = driver.find_element_by_tag_name('html')
-                    html.send_keys(Keys.END)
-                    # just_clicker(By.XPATH, "//th[contains(@aria-label,'Last Name')]")
-                    # wait_till_invisibility(By.ID, loading_after_grade_click, common_time)
+                            if first_name_on_ui.lower() == candidate_first_name_excel.lower() and last_name_on_ui.lower() == candidate_last_name_excel.lower():
+                                # print(f'first_name_on_ui and candidate_first_name_excel matches')
+                                #
+                                # print('Wait start for checkbox clickability')
+                                WebDriverWait(driver, 3).until(
+                                    EC.element_to_be_clickable(
+                                        (By.XPATH, student_rows_unchecked + "//td[1]//input")))
 
-                    all_available_unchecked_student_rows = driver.find_elements(By.XPATH, student_rows_unchecked)
+                                # print("Wait done ")
+                                # print("Scroll started")
+                                driver.execute_script("arguments[0].scrollIntoView();", (
+                                    driver.find_elements(By.XPATH, student_rows_unchecked + "//td[1]//input"))[j])
+                                # print("Scroll eneded ")
+                                # print("clicking checkbox")
+                                driver.execute_script("arguments[0].click();", (
+                                    driver.find_elements(By.XPATH, student_rows_unchecked + "//td[1]//input"))[j])
+                                # (driver.find_elements(By.XPATH, student_rows_unchecked + "//td[1]//input"))[j].click()
+                                # print("Click ended")
+                                break
+                    try:
+                        print("Wait start for save button click")
+                        driver.execute_script("arguments[0].click();", WebDriverWait(driver, 4).until(
+                            EC.element_to_be_clickable((By.ID, save_btn_assign))))
+                        print("Wait done for save button click")
+                        wait_till_invisibility(By.ID, loading_after_grade_click, 3 * common_time)
 
-                    for j in range(len(all_available_unchecked_student_rows)):
-                        # print(f'j value = {j}')
-                        last_name_on_ui = (driver.find_elements(By.XPATH, student_rows_unchecked + "//td[2]"))[
-                            j].text.strip()
-                        first_name_on_ui = driver.find_elements(By.XPATH, student_rows_unchecked + "//td[3]")[
-                            j].text.strip()
+                    except:
+                        print('lel')
 
-                        # print(f'last_name_on_ui = {last_name_on_ui}')
-                        # print(f'first_name_on_ui  = {first_name_on_ui}')
-                        # print(f'candidate_first_name_excel = {candidate_first_name_excel}')
-                        # print(f'candidate_last_name_excel = {candidate_last_name_excel}')
-
-                        if first_name_on_ui.lower() == candidate_first_name_excel.lower() and last_name_on_ui.lower() == candidate_last_name_excel.lower():
-                            # print(f'first_name_on_ui and candidate_first_name_excel matches')
-
-                            WebDriverWait(driver, 3).until(
-                                EC.element_to_be_clickable(
-                                    (By.XPATH, student_rows_unchecked + "//td[1]//input")))
-
-                            driver.execute_script("arguments[0].scrollIntoView();", (
-                                driver.find_elements(By.XPATH, student_rows_unchecked + "//td[1]//input"))[j])
-
-                            driver.execute_script("arguments[0].click();", (
-                                driver.find_elements(By.XPATH, student_rows_unchecked + "//td[1]//input"))[j])
-                            # (driver.find_elements(By.XPATH, student_rows_unchecked + "//td[1]//input"))[j].click()
-                            break
-
-                        # sleep(1)
-
-            try:
-                driver.execute_script("arguments[0].click();", WebDriverWait(driver, 4).until(
-                    EC.element_to_be_clickable((By.ID, save_btn_assign))))
-                wait_till_invisibility(By.ID, loading_after_grade_click, 3 * common_time)
-            except:
-                print('lel')
-
-                break
-
-                # break
-
-                # if
-                #
-                # print(candidate_last_name_excel, candidate_first_name_excel, candidate_corresponding_grader_excel)
+                    # break
+            # break
